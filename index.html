@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Vector → Alight Motion XML (Prototype)</title>
+<title>Vector → Alight Motion XML (Contour Test)</title>
 <style>
 :root{color-scheme:dark;--bg:#101116;--panel:#1a1c25;--line:#303442;--text:#f5f6fb;--muted:#aeb4c5;--accent:#a78bfa}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
@@ -39,10 +39,10 @@ a{color:#c4b5fd}code{overflow-wrap:anywhere}.actions{display:flex;gap:8px;flex-w
 <h3>2. Export</h3>
 <div class="actions">
 <button id="svgBtn" disabled>Download SVG</button>
-<button id="xmlBtn" disabled>Download XML (experimental)</button>
+<button id="xmlBtn" disabled>Download XML (contour test)</button>
 <button id="manifestBtn" disabled>Download paths JSON</button>
 </div>
-<p class="warn small">XML export is a best-effort scene draft using the documented <code>&lt;scene&gt;</code>, <code>&lt;shape&gt;</code> and <code>&lt;path d="..."&gt;</code> pattern. The XML format is reverse-engineered and can vary by Alight Motion version. Test it in a duplicate project first. SVG is the reliable output of this prototype.</p>
+<p class="warn small">XML export now uses a contour-based structure modeled on the user-provided importable example. It is still experimental: coordinate centering, holes, and shape geometry may need adjustment. Test in Alight Motion before relying on it. SVG remains the reliable output.</p>
 </div>
 <div class="panel">
 <h3>What this prototype can and cannot do</h3>
@@ -111,12 +111,16 @@ $("svgBtn").onclick=()=>download(originalName+".svg",svgText,"image/svg+xml;char
 $("manifestBtn").onclick=()=>download(originalName+"-paths.json",JSON.stringify({width:imageW,height:imageH,paths},null,2),"application/json");
 $("xmlBtn").onclick=()=>{
  const now=Date.now(), total=2000;
- const header=`<?xml version="1.0" encoding="UTF-8"?>\n<scene title="${esc(originalName)} Vector" width="${imageW}" height="${imageH}" exportWidth="${imageW}" exportHeight="${imageH}" bgcolor="#00000000" totalTime="${total}" fps="30" modifiedTime="${now}" amver="106" ffver="101" am="com.alightcreative.motion/5.0.0" amplatform="android">`;
+ // Export contours in the same general structure as the user's known-importing reference.
+ // This is a compatibility test, not a guarantee: path geometry and holes still need validation in Alight Motion.
+ const header=`<?xml version="1.0" encoding="UTF-8"?>\n<scene title="${esc(originalName)} Vector" width="${imageW}" height="${imageH}" exportWidth="${imageW}" exportHeight="${imageH}" bgcolor="#FF000000" totalTime="${total}" fps="30" modifiedTime="${now}" amver="859" ffver="107" am="com.alightcreative.motion/6.2.53" amplatform="ios" precompose="dynamicResolution" retime="freeze">`;
  const layers=paths.map((p,i)=>{
    const color=toArgb(p.fill);
-   return `  <shape id="${i+1}" label="Vector part ${i+1}" startTime="0" endTime="${total}" fillType="color" s=".poly">\n    <transform><location value="0.000000,0.000000"/><scale value="1.000000,1.000000"/><rotation value="0.000000"/><anchor value="0.000000,0.000000"/><opacity value="1.000000"/></transform>\n    <fillColor value="${color}"/>\n    <path d="${esc(p.d)}"/>\n  </shape>`;
+   // ImageTracer paths can contain multiple SVG subpaths. Keep the original path data as one contour;
+   // hole contours may require explicit exclude=true and are not inferred reliably in this prototype.
+   return `  <shape id="${i+1}" label="vector_part_${i+1}" startTime="0" endTime="${total}" fillType="color">\n    <transform><location value="0.000000,0.000000,0.000000"/><pivot value="0.000000,0.000000"/><scale value="1.000000,1.000000"/></transform>\n    <fillColor value="${color}"/>\n    <path><contour d="${esc(p.d)}"/></path>\n    <path-stroke direction="centered" join="round" width="0"><color value="${color}"/></path-stroke>\n  </shape>`;
  }).join("\n");
- download(originalName+"-AM-EXPERIMENTAL.xml",header+"\n"+layers+"\n</scene>\n","application/xml;charset=utf-8");
+ download(originalName+"-AM-TEST.xml",header+"\n"+layers+"\n</scene>\n","application/xml;charset=utf-8");
 };
 </script>
 </body></html>
