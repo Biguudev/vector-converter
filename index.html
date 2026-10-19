@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vector → Alight Motion XML (Prototype)</title>
+<style>
+:root{color-scheme:dark;--bg:#101116;--panel:#1a1c25;--line:#303442;--text:#f5f6fb;--muted:#aeb4c5;--accent:#a78bfa}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:980px;margin:auto;padding:22px 16px 44px}h1{font-size:clamp(24px,5vw,36px);line-height:1.1;margin:0 0 10px}
+p{color:var(--muted)}.tag{display:inline-block;border:1px solid #51447e;color:#d8ccff;border-radius:99px;padding:3px 10px;font-size:12px;margin-bottom:12px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin:14px 0}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}button,.filebtn{border:0;border-radius:10px;padding:11px 15px;background:var(--accent);color:#171323;font-weight:750;cursor:pointer}
+button:disabled{opacity:.4;cursor:not-allowed}input[type=file]{max-width:100%}label{display:block;color:var(--muted);font-size:13px;margin:10px 0 4px}
+input[type=range]{width:100%}.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.preview{min-height:220px;background:repeating-conic-gradient(#272a35 0% 25%,#1c1f28 0% 50%) 50%/20px 20px;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.preview img,.preview svg{max-width:100%;max-height:440px;object-fit:contain}.small{font-size:12px;color:var(--muted)}.status{white-space:pre-wrap;color:#d8ccff}.warn{border-left:3px solid #fbbf24;padding-left:12px}.hidden{display:none}
+a{color:#c4b5fd}code{overflow-wrap:anywhere}.actions{display:flex;gap:8px;flex-wrap:wrap}
+</style>
+</head>
+<body><main>
+<span class="tag">FREE · BROWSER-ONLY PROTOTYPE</span>
+<h1>Image → Vector → Alight Motion XML</h1>
+<p>Upload a flat illustration or cartoon. This prototype traces colored regions into vector paths locally in your browser, previews the result, and exports SVG plus an experimental Alight Motion scene XML.</p>
+<div class="panel">
+  <label for="file">1. Choose image (PNG, JPG, WebP)</label>
+  <input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/bmp">
+  <div class="cols">
+    <div><label for="colors">Color precision: <b id="colorsVal">6</b></label><input id="colors" type="range" min="1" max="8" value="6"></div>
+    <div><label for="speckle">Remove tiny details: <b id="speckleVal">4</b> px</label><input id="speckle" type="range" min="0" max="12" value="4"></div>
+  </div>
+  <div class="row" style="margin-top:14px"><button id="trace" disabled>Trace image</button><span id="status" class="status">Choose an image to begin.</span></div>
+</div>
+<div class="cols">
+  <section class="panel"><h3>Original</h3><div class="preview" id="original"><span class="small">Image preview</span></div></section>
+  <section class="panel"><h3>Vector preview</h3><div class="preview" id="vector"><span class="small">Trace result appears here</span></div><p id="stats" class="small"></p></section>
+</div>
+<div class="panel">
+<h3>2. Export</h3>
+<div class="actions">
+<button id="svgBtn" disabled>Download SVG</button>
+<button id="xmlBtn" disabled>Download XML (experimental)</button>
+<button id="manifestBtn" disabled>Download paths JSON</button>
+</div>
+<p class="warn small">XML export is a best-effort scene draft using the documented <code>&lt;scene&gt;</code>, <code>&lt;shape&gt;</code> and <code>&lt;path d="..."&gt;</code> pattern. The XML format is reverse-engineered and can vary by Alight Motion version. Test it in a duplicate project first. SVG is the reliable output of this prototype.</p>
+</div>
+<div class="panel">
+<h3>What this prototype can and cannot do</h3>
+<ul>
+<li>Can trace multiple colored regions and keep each SVG path separately editable in vector software.</li>
+<li>Can export a scene XML draft with one shape layer per traced path.</li>
+<li>Does <b>not</b> understand semantic parts such as “hair”, “face”, or “shirt”; separate paths are color/region segments, not AI-recognized body parts.</li>
+<li>Does not remove a photo background with AI segmentation yet. Best results come from transparent PNGs, cartoons, logos, and flat illustrations.</li>
+<li>All image processing runs locally after the tracing library loads. The library is fetched from a public CDN; the image itself is not uploaded.</li>
+</ul>
+</div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let img = null, svgText = "", paths = [], imageW = 0, imageH = 0, originalName = "vector";
+const fileInput = $("file"), traceBtn = $("trace");
+$("colors").addEventListener("input",()=> $("colorsVal").textContent=$("colors").value);
+$("speckle").addEventListener("input",()=> $("speckleVal").textContent=$("speckle").value);
+fileInput.addEventListener("change",()=>{
+ const f=fileInput.files&&fileInput.files[0]; if(!f)return;
+ if(f.size>12*1024*1024){setStatus("Please use an image under 12 MB for this first prototype.");return;}
+ originalName=(f.name||"vector").replace(/\.[^.]+$/,"").replace(/[^a-z0-9_-]/gi,"_").slice(0,50)||"vector";
+ const url=URL.createObjectURL(f); img=new Image();
+ img.onload=()=>{imageW=img.naturalWidth;imageH=img.naturalHeight;$("original").replaceChildren(img.cloneNode());$("original").firstChild.src=url;traceBtn.disabled=false;setStatus(`Ready: ${imageW} × ${imageH}px`);};
+ img.onerror=()=>setStatus("Could not read that image."); img.src=url;
+});
+function setStatus(s){$("status").textContent=s}
+function download(name, content, type){
+ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);
+}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function toArgb(color){
+ let c=(color||"#000000").trim(); if(/^#[0-9a-f]{3}$/i.test(c))c="#"+c.slice(1).split("").map(x=>x+x).join("");
+ if(/^#[0-9a-f]{6}$/i.test(c))return "#FF"+c.slice(1).toUpperCase();
+ if(/^#[0-9a-f]{8}$/i.test(c))return "#"+c.slice(7,9).toUpperCase()+c.slice(1,7).toUpperCase();
+ return "#FF000000";
+}
+traceBtn.addEventListener("click",()=>{
+ if(!img)return;
+ if(typeof ImageTracer==="undefined"){setStatus("Tracing library did not load. Check internet and reload.");return;}
+ traceBtn.disabled=true;setStatus("Tracing… large images can take a little while.");
+ setTimeout(()=>{
+  try{
+   const opts={ltres:1,qtres:1,numberofcolors:Math.max(2,Math.min(64,Math.round(Math.pow(2,Number($("colors").value))))),colorsampling:2,mincolorratio:0.02,roundcoords:2,scale:1, strokewidth:0,viewbox:true,blurradius:0,blurdelta:20, pathomit:Number($("speckle").value),rightangleenhance:true};
+   svgText=ImageTracer.imagedataToSVG(imageDataFrom(img),opts);
+   const doc=new DOMParser().parseFromString(svgText,"image/svg+xml");
+   paths=Array.from(doc.querySelectorAll("path")).map((p,i)=>({id:i+1,d:p.getAttribute("d")||"",fill:p.getAttribute("fill")||"#000000"})).filter(p=>p.d.length>0);
+   if(!paths.length)throw new Error("No paths found. Try another image or change the settings.");
+   $("vector").innerHTML=svgText;
+   $("vector").querySelector("svg").style.maxWidth="100%";$("vector").querySelector("svg").style.maxHeight="440px";
+   $("stats").textContent=`${paths.length} separate vector paths · ${imageW} × ${imageH}px`;
+   $("svgBtn").disabled=$("xmlBtn").disabled=$("manifestBtn").disabled=false;
+   setStatus("Done. Download SVG first; XML is experimental.");
+  }catch(e){setStatus("Trace failed: "+e.message);}finally{traceBtn.disabled=false;}
+ },50);
+});
+function imageDataFrom(image){
+ const max=1100, scale=Math.min(1,max/Math.max(image.naturalWidth,image.naturalHeight));
+ const c=document.createElement("canvas");c.width=Math.max(1,Math.round(image.naturalWidth*scale));c.height=Math.max(1,Math.round(image.naturalHeight*scale));
+ const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(image,0,0,c.width,c.height);
+ // The tracing SVG dimensions are the resized canvas dimensions.
+ imageW=c.width;imageH=c.height;return ctx.getImageData(0,0,c.width,c.height);
+}
+$("svgBtn").onclick=()=>download(originalName+".svg",svgText,"image/svg+xml;charset=utf-8");
+$("manifestBtn").onclick=()=>download(originalName+"-paths.json",JSON.stringify({width:imageW,height:imageH,paths},null,2),"application/json");
+$("xmlBtn").onclick=()=>{
+ const now=Date.now(), total=2000;
+ const header=`<?xml version="1.0" encoding="UTF-8"?>\n<scene title="${esc(originalName)} Vector" width="${imageW}" height="${imageH}" exportWidth="${imageW}" exportHeight="${imageH}" bgcolor="#00000000" totalTime="${total}" fps="30" modifiedTime="${now}" amver="106" ffver="101" am="com.alightcreative.motion/5.0.0" amplatform="android">`;
+ const layers=paths.map((p,i)=>{
+   const color=toArgb(p.fill);
+   return `  <shape id="${i+1}" label="Vector part ${i+1}" startTime="0" endTime="${total}" fillType="color" s=".poly">\n    <transform><location value="0.000000,0.000000"/><scale value="1.000000,1.000000"/><rotation value="0.000000"/><anchor value="0.000000,0.000000"/><opacity value="1.000000"/></transform>\n    <fillColor value="${color}"/>\n    <path d="${esc(p.d)}"/>\n  </shape>`;
+ }).join("\n");
+ download(originalName+"-AM-EXPERIMENTAL.xml",header+"\n"+layers+"\n</scene>\n","application/xml;charset=utf-8");
+};
+</script>
+</body></html>
